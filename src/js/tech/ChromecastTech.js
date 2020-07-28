@@ -55,6 +55,11 @@ ChromecastTech = {
       this._requestTitle = options.requestTitleFn || _.noop;
       this._requestSubtitle = options.requestSubtitleFn || _.noop;
       this._requestCustomData = options.requestCustomDataFn || _.noop;
+      this._requestReleaseDate = options.requestReleaseDateFn || _.noop;
+      this._requestPoster = options.requestPosterFn || this.poster;
+      this._requestActiveTrack = options.requestActiveTrackFn;
+      this._tracks = options.tracks || [];
+
       // See `currentTime` function
       this._initialStartTime = options.startTime || 0;
 
@@ -158,17 +163,58 @@ ChromecastTech = {
           title = this._requestTitle(source),
           subtitle = this._requestSubtitle(source),
           customData = this._requestCustomData(source),
+          releaseDate = this._requestReleaseDate(source),
+          poster = this._requestPoster(source),
+          remoteTracks = [],
+          totalTracks = 0,
+          track,
+          remoteTrack,
+          i,
           request;
 
       this.trigger('waiting');
       this._clearSessionTimeout();
 
+      var textTracks = this._tracks;
+      var activeTrack = this._requestActiveTrack();
+
+      if (textTracks.length > 0) {
+        totalTracks = textTracks.length;
+
+        for (i = 0; i < totalTracks; i++) {
+          track = textTracks[i],
+          remoteTrack = new chrome.cast.media.Track(i, chrome.cast.media.TrackType.TEXT);
+
+          remoteTrack.name = track.label;
+          remoteTrack.language = track.language;
+          remoteTrack.subtype = chrome.cast.media.TextTrackType.CAPTIONS;
+          remoteTrack.trackContentId = track.src;
+          remoteTrack.trackContentType = 'text/vtt';
+          remoteTrack.customData = {
+            default: track.default,
+            active: (track.language === activeTrack),
+          }
+
+          remoteTracks.push(remoteTrack);
+        }
+      }
+
       mediaInfo.metadata = new chrome.cast.media.GenericMediaMetadata();
       mediaInfo.metadata.metadataType = chrome.cast.media.MetadataType.GENERIC;
       mediaInfo.metadata.title = title;
       mediaInfo.metadata.subtitle = subtitle;
+      mediaInfo.metadata.releaseDate = releaseDate;
+      
+      if (poster) {
+         mediaInfo.metadata.images = [ { url: poster } ];
+      }
+      
       if (customData) {
          mediaInfo.customData = customData;
+      }
+
+      if (remoteTracks.length > 0) {
+        mediaInfo.tracks = remoteTracks;
       }
 
       this._ui.updateTitle(title);
